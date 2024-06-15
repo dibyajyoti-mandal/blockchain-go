@@ -1,8 +1,11 @@
 package main
 
 import (
+	"crypto/md5"
+	"encoding/json"
+	"fmt"
+	"io"
 	"log"
-
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -35,6 +38,29 @@ type Blockchain struct {
 }
 
 var BlockChain *Blockchain
+
+func NewItem(w http.ResponseWriter, r *http.Request) {
+	var item Item
+	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("could not create: %v", err)
+		w.Write([]byte("could not create item"))
+		return
+	}
+	h := md5.New()
+	io.WriteString(h, item.Price)
+	item.ID = fmt.Sprintf("%x", h.Sum(nil))
+
+	res, err := json.MarshalIndent(item, "", " ")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("could not marshal: %v", err)
+		w.Write([]byte("could not create item(2)"))
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write(res)
+}
 
 func main() {
 	r := mux.NewRouter()
