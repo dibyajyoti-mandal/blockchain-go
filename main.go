@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -49,7 +50,7 @@ func CreateBlock(prev *Block, checkout Checkout) *Block {
 	block.Time = time.Now().String()
 	block.Data = checkout
 	block.PrevHash = prev.Hash
-	block.generateHash()
+	block.performHashing()
 
 	return block
 }
@@ -63,9 +64,9 @@ func (bc *Blockchain) addBlock(data Checkout) {
 	}
 }
 
-func (bl *Block) generateHash() {
+func (bl *Block) performHashing() {
 	bytes, _ := json.Marshal(bl.Data)
-	data := string(bl.Index) + bl.Time + string(bytes) + bl.PrevHash
+	data := strconv.Itoa(bl.Index) + bl.Time + string(bytes) + bl.PrevHash
 	hash := sha256.New()
 	hash.Write([]byte(data))
 	bl.Hash = hex.EncodeToString(hash.Sum(nil))
@@ -85,7 +86,7 @@ func valid(block *Block, prev *Block) bool {
 }
 
 func (bl *Block) validHash(hash string) bool {
-	bl.generateHash()
+	bl.performHashing()
 	return bl.Hash == hash
 }
 
