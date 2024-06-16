@@ -2,6 +2,8 @@ package main
 
 import (
 	"crypto/md5"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -45,6 +47,9 @@ func CreateBlock(prev *Block, checkout Checkout) *Block {
 	block := &Block{}
 	block.Index = prev.Index + 1
 	block.Time = time.Now().String()
+	block.Data = checkout
+	block.PrevHash = prev.Hash
+	block.generateHash()
 
 	return block
 }
@@ -56,6 +61,32 @@ func (bc *Blockchain) addBlock(data Checkout) {
 	if valid(block, prev) {
 		bc.blocks = append(bc.blocks, block)
 	}
+}
+
+func (bl *Block) generateHash() {
+	bytes, _ := json.Marshal(bl.Data)
+	data := string(bl.Index) + bl.Time + string(bytes) + bl.PrevHash
+	hash := sha256.New()
+	hash.Write([]byte(data))
+	bl.Hash = hex.EncodeToString(hash.Sum(nil))
+}
+
+func valid(block *Block, prev *Block) bool {
+	if prev.Hash != block.PrevHash {
+		return false
+	}
+	if !block.validHash(block.Hash) {
+		return false
+	}
+	if prev.Index+1 != block.Index {
+		return false
+	}
+	return true
+}
+
+func (bl *Block) validHash(hash string) bool {
+	bl.generateHash()
+	return bl.Hash == hash
 }
 
 func newItem(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +112,17 @@ func newItem(w http.ResponseWriter, r *http.Request) {
 	w.Write(res)
 }
 
+func getBlocks(w http.ResponseWriter, r *http.Request) {
+
+	bytes, err := json.MarshalIndent(BlockChain.blocks, "", " ")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(err)
+		return
+	}
+	io.WriteString(w, string(bytes))
+}
+
 func writeBlock(w http.ResponseWriter, r *http.Request) {
 	var checkout Checkout
 	if err := json.NewDecoder(r.Body).Decode(&checkout); err != nil {
@@ -93,12 +135,34 @@ func writeBlock(w http.ResponseWriter, r *http.Request) {
 	BlockChain.addBlock(checkout)
 }
 
+func Genesis() *Block {
+	return CreateBlock(&Block{}, Checkout{IsGenesis: true})
+}
+
+func NewBC() *Blockchain {
+	return &Blockchain{[]*Block{Genesis()}}
+}
+
 func main() {
+
+	BlockChain = NewBC()
+
 	r := mux.NewRouter()
 	r.HandleFunc("/", getBlocks).Methods("GET")
 	r.HandleFunc("/", writeBlock).Methods("POST")
 	r.HandleFunc("/new", newItem).Methods("POST")
 
+	go func() {
+
+		for _, block := range BlockChain.blocks {
+			fmt.Printf("Prev. hash: %x\n", block.PrevHash)
+			bytes, _ := json.MarshalIndent(block.Data, "", " ")
+			fmt.Printf("Data: %v\n", string(bytes))
+			fmt.Printf("Hash: %x\n", block.Hash)
+			fmt.Println()
+		}
+
+	}()
 	log.Println("Running on port: 3000")
 	log.Fatal(http.ListenAndServe(":3000", r))
 
