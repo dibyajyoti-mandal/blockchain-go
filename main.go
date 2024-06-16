@@ -7,13 +7,14 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/mux"
 )
 
 type Block struct {
-	Pos      int
-	Data     ItemCheckout
+	Index    int
+	Data     Checkout
 	Time     string
 	Hash     string
 	PrevHash string
@@ -26,7 +27,7 @@ type Item struct {
 	Price  string `json:"price"`
 }
 
-type ItemCheckout struct {
+type Checkout struct {
 	ItemID    string `json:"item_id"`
 	Buyer     string `json:"buyer"`
 	Date      string `json:"date"`
@@ -39,7 +40,25 @@ type Blockchain struct {
 
 var BlockChain *Blockchain
 
-func NewItem(w http.ResponseWriter, r *http.Request) {
+func CreateBlock(prev *Block, checkout Checkout) *Block {
+
+	block := &Block{}
+	block.Index = prev.Index + 1
+	block.Time = time.Now().String()
+
+	return block
+}
+
+func (bc *Blockchain) addBlock(data Checkout) {
+	prev := bc.blocks[len(bc.blocks)-1]
+	block := CreateBlock(prev, data)
+
+	if valid(block, prev) {
+		bc.blocks = append(bc.blocks, block)
+	}
+}
+
+func newItem(w http.ResponseWriter, r *http.Request) {
 	var item Item
 	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -60,6 +79,18 @@ func NewItem(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Write(res)
+}
+
+func writeBlock(w http.ResponseWriter, r *http.Request) {
+	var checkout Checkout
+	if err := json.NewDecoder(r.Body).Decode(&checkout); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("coudlnt create block")
+		w.Write([]byte("COuld not create block"))
+		return
+	}
+
+	BlockChain.addBlock(checkout)
 }
 
 func main() {
